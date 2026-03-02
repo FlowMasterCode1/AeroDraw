@@ -1,6 +1,6 @@
 {
   "name": "aerodraw",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AeroDraw — Screen Drawing Tool in Windows 11 Fluent Design",
   "main": "main.js",
   "scripts": {
