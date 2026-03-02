@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroDraw</title>
+  <style>
+    /* =============================================
+       СБРОС И БАЗОВЫЕ СТИЛИ
+       ============================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      /* Прозрачный фон для Electron */
+      background: transparent;
+      /* Фоллбэк-градиент для браузерного тестирования */
+      background-image: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      user-select: none;
+    }
+
+    /* =============================================
+       CANVAS
+       ============================================= */
+    #canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    /* =============================================
+       FLUENT DESIGN — ПЕРЕМЕННЫЕ
+       ============================================= */
+    :root {
+      --acrylic-bg: rgba(26, 26, 28, 0.52);
+      --acrylic-border: rgba(255, 255, 255, 0.08);
+      --acrylic-blur: blur(30px) saturate(140%);
+      --acrylic-radius: 14px;
+      --acrylic-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      --icon-idle: rgba(255, 255, 255, 0.70);
+      --icon-hover: rgba(255, 255, 255, 0.92);
+      --btn-hover-bg: rgba(255, 255, 255, 0.055);
+      --btn-active-bg: rgba(0, 207, 254, 0.14);
+      --accent: #00CFFE;
+      --accent-glow: rgba(0, 207, 254, 0.35);
+      --toolbar-width: 56px;
+    }
+
+    /* =============================================
+       ШУМОВАЯ SVG-ТЕКСТУРА (Acrylic noise)
+       ============================================= */
+    .acrylic {
+      background: var(--acrylic-bg);
+      backdrop-filter: var(--acrylic-blur);
+      -webkit-backdrop-filter: var(--acrylic-blur);
+      border: 1.2px solid var(--acrylic-border);
+      border-radius: var(--acrylic-radius);
+      box-shadow: var(--acrylic-shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* SVG-шум поверх acrylic */
+    .acrylic::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.035;
+      border-radius: inherit;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* =============================================
+       ТУЛБАР — ВЕРТИКАЛЬНАЯ ПАНЕЛЬ СЛЕВА
+       ============================================= */
+    #toolbar {
+      position: fixed;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: var(--toolbar-width);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 6px;
+      z-index: 1000;
+      animation: slideInLeft 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateY(-50%) translateX(-30px); }
+      to   { opacity: 1; transform: translateY(-50%) translateX(0); }
+    }
+
+    /* Разделитель между группами */
+    .toolbar-sep {
+      width: 32px;
+      height: 1px;
+      background: var(--acrylic-border);
+      margin: 4px 0;
+      flex-shrink: 0;
+    }
+
+    /* =============================================
+       КНОПКИ ТУЛБАРА
+       ============================================= */
+    .tool-btn {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      border: none;
+      background: transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+      flex-shrink: 0;
+      outline: none;
+    }
+
+    .tool-btn svg {
+      stroke: var(--icon-idle);
+      transition: stroke 0.15s, filter 0.15s;
+      flex-shrink: 0;
+    }
+
+    /* Hover */
+    .tool-btn:hover {
+      background: var(--btn-hover-bg);
+      transform: scale(1.08);
+    }
+
+    .tool-btn:hover svg {
+      stroke: var(--icon-hover);
+      filter: drop-shadow(0 0 4px rgba(255,255,255,0.2));
+    }
+
+    /* Active (выбранный инструмент) */
+    .tool-btn.active {
+      background: var(--btn-active-bg);
+      animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    .tool-btn.active svg {
+      stroke: #ffffff;
+      filter: drop-shadow(0 0 6px var(--accent-glow));
+    }
+
+    /* Точка-индикатор активного инструмента */
+    .tool-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: 3px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    /* Press */
+    .tool-btn:active {
+      transform: scale(0.90);
+    }
+
+    /* Flash (для action-кнопок) */
+    .tool-btn.flash {
+      animation: flashAnim 0.3s ease;
+    }
+
+    @keyframes popIn {
+      0%   { transform: scale(0.85); }
+      60%  { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes flashAnim {
+      0%   { background: rgba(0, 207, 254, 0.35); }
+      100% { background: transparent; }
+    }
+
+    /* =============================================
+       ПОДМЕНЮ
+       ============================================= */
+    .submenu {
+      position: fixed;
+      left: 72px;
+      display: none;
+      z-index: 2000;
+      padding: 12px;
+      min-width: 180px;
+      animation: submenuIn 0.2s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+    }
+
+    .submenu.visible {
+      display: block;
+    }
+
+    @keyframes submenuIn {
+      from { opacity: 0; transform: translateX(-10px) scale(0.95); }
+      to   { opacity: 1; transform: translateX(0) scale(1); }
+    }
+
+    /* --- Подменю толщины --- */
+    #thickness-menu {
+      width: 200px;
+    }
+
+    #thickness-menu label {
+      color: rgba(255,255,255,0.7);
+      font-size: 11px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    #thickness-slider {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    #thickness-preview {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+
+    #thickness-dot {
+      background: white;
+      border-radius: 50%;
+      transition: width 0.1s, height 0.1s;
+    }
+
+    #thickness-value {
+      color: rgba(255,255,255,0.8);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    /* --- Подменю цветов --- */
+    #color-menu {
+      width: 200px;
+    }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+
+    .color-swatch:hover { transform: scale(1.15); }
+
+    .color-swatch.selected {
+      border-color: white;
+      box-shadow: 0 0 8px rgba(255,255,255,0.4);
+    }
+
+    #custom-color-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    #custom-color-wrap label {
+      color: rgba(255,255,255,0.6);
+      font-size: 11px;
+    }
+
+    #custom-color-input {
+      width: 36px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* --- Подменю фигур --- */
+    #shape-menu {
+      width: 168px;
+    }
+
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .shape-btn {
+      width: 44px;
+      height: 44px;
+      border: 1.5px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    }
+
+    .shape-btn svg { stroke: rgba(255,255,255,0.7); }
+
+    .shape-btn:hover {
+      background: var(--btn-hover-bg);
+      transform: scale(1.08);
+    }
+
+    .shape-btn.active {
+      background: var(--btn-active-bg);
+      border-color: var(--accent);
+    }
+
+    .shape-btn.active svg { stroke: white; }
+
+    /* =============================================
+       СТАТУС-БАР
+       ============================================= */
+    #statusbar {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 16px;
+      z-index: 1000;
+      white-space: nowrap;
+      animation: fadeIn 0.5s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    #statusbar .status-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.65);
+    }
+
+    #status-color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* =============================================
+       ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ
+       ============================================= */
+    #hotkeys-panel {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      padding: 10px 14px;
+      z-index: 1000;
+      font-size: 10px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.7;
+      min-width: 160px;
+      animation: fadeIn 0.5s ease both;
+    }
+
+    #hotkeys-panel .hk-title {
+      color: rgba(255,255,255,0.8);
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #hotkeys-panel .hk-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #hotkeys-panel kbd {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-family: inherit;
+      font-size: 9px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    /* =============================================
+       ТЕКСТОВЫЙ ИНПУТ (для инструмента Text)
+       ============================================= */
+    #text-input-overlay {
+      position: fixed;
+      display: none;
+      background: transparent;
+      border: none;
+      border-bottom: 1.5px solid var(--accent);
+      outline: none;
+      color: inherit;
+      font-family: 'Segoe UI', sans-serif;
+      z-index: 500;
+      min-width: 100px;
+      padding: 2px 4px;
+    }
+
+    /* =============================================
+       РЕЖИМ КУРСОРА — индикатор
+       ============================================= */
+    #mode-indicator {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 5px 14px;
+      z-index: 1000;
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+      display: none;
+    }
+
+    #mode-indicator.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- Основной canvas для рисования -->
+<canvas id="canvas"></canvas>
+
+<!-- Текстовый инпут для инструмента Text -->
+<input id="text-input-overlay" type="text" placeholder="Введите текст…" autocomplete="off">
+
+<!-- =============================================
+     ПАНЕЛЬ ИНСТРУМЕНТОВ
+     ============================================= -->
+<div id="toolbar" class="acrylic">
+
+  <!-- ГРУППА 1: Навигация -->
+  <button class="tool-btn" id="btn-cursor" title="Курсор (V)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Стрелка Windows-стиль -->
+      <path d="M4 2l16 9-7 1.5-3.5 7z"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-eye" title="Скрыть/показать (H)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  </button>
+
+  <div class="toolbar-sep"></div>
+
+  <!-- ГРУППА 2: Рисование -->
+  <button class="tool-btn active" id="btn-pencil" title="Карандаш (P)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-marker" title="Маркер (M)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 21l7-7"/>
+      <path d="M12.5 4.5l7 7-9 9H4v-6.5l8.5-9.5z"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-highlighter" title="Выделитель (G)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 11l-6 6v3h3l6-6"/>
+      <path d="M22 2l-3 3-10 10 3 3 10-10 3-3-3-3z"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-eraser" title="Ластик (E)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/>
+      <path d="M6 11l7 7"/>
+    </svg>
+  </button>
+
+  <div class="toolbar-sep"></div>
+
+  <!-- ГРУППА 3: Фигуры -->
+  <button class="tool-btn" id="btn-shapes" title="Фигуры (S)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <circle cx="17.5" cy="6.5" r="3.5"/>
+      <path d="M12 21l4-7H8l4 7z"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-line" title="Линия (L)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round">
+      <line x1="4" y1="20" x2="20" y2="4"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-arrow" title="Стрелка (A)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="5" y1="19" x2="19" y2="5"/>
+      <polyline points="9 5 19 5 19 15"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-text" title="Текст (T)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="4 7 4 4 20 4 20 7"/>
+      <line x1="9" y1="20" x2="15" y2="20"/>
+      <line x1="12" y1="4" x2="12" y2="20"/>
+    </svg>
+  </button>
+
+  <div class="toolbar-sep"></div>
+
+  <!-- ГРУППА 4: Настройки -->
+  <button class="tool-btn" id="btn-thickness" title="Толщина (B)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4" fill="rgba(255,255,255,0.7)" stroke="none"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-color" title="Цвет (C)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="0">
+      <rect x="3" y="3" width="8.5" height="8.5" rx="2" fill="#FF6EC7"/>
+      <rect x="12.5" y="3" width="8.5" height="8.5" rx="2" fill="#00CFFE"/>
+      <rect x="3" y="12.5" width="8.5" height="8.5" rx="2" fill="#FFCC00"/>
+      <rect x="12.5" y="12.5" width="8.5" height="8.5" rx="2" fill="#6BFF8E"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-eyedropper" title="Пипетка (I)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 22l5-5"/>
+      <path d="M9.5 14.5L16 8l2-2 2 2-6.5 6.5-4 0 0-4z" fill="none"/>
+      <path d="M16 8l2-2 2 2-2 2-2-2z"/>
+    </svg>
+  </button>
+
+  <div class="toolbar-sep"></div>
+
+  <!-- ГРУППА 5: Действия -->
+  <button class="tool-btn" id="btn-undo" title="Отменить (Ctrl+Z)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="1 4 1 10 7 10"/>
+      <path d="M3.51 15a9 9 0 1 0 .49-5.8"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-redo" title="Повторить (Ctrl+Y)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10"/>
+      <path d="M20.49 15a9 9 0 1 1-.49-5.8"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-clear" title="Очистить (Del)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="btn-screenshot" title="Скриншот (Ctrl+S)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+  </button>
+</div>
+
+<!-- =============================================
+     ПОДМЕНЮ ТОЛЩИНЫ
+     ============================================= -->
+<div id="thickness-menu" class="submenu acrylic">
+  <label>Толщина кисти</label>
+  <input type="range" id="thickness-slider" min="1" max="40" value="4">
+  <div id="thickness-preview">
+    <div id="thickness-dot" style="width:8px;height:8px;"></div>
+    <span id="thickness-value">4 px</span>
+  </div>
+</div>
+
+<!-- =============================================
+     ПОДМЕНЮ ЦВЕТОВ
+     ============================================= -->
+<div id="color-menu" class="submenu acrylic">
+  <div class="color-grid" id="color-grid"></div>
+  <div id="custom-color-wrap">
+    <label>Свой цвет:</label>
+    <input type="color" id="custom-color-input" value="#FFFFFF">
+  </div>
+</div>
+
+<!-- =============================================
+     ПОДМЕНЮ ФИГУР
+     ============================================= -->
+<div id="shape-menu" class="submenu acrylic">
+  <div class="shape-grid">
+    <button class="shape-btn active" data-shape="rect" title="Прямоугольник">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+    </button>
+    <button class="shape-btn" data-shape="circle" title="Круг/Эллипс">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2"><circle cx="12" cy="12" r="9"/></svg>
+    </button>
+    <button class="shape-btn" data-shape="triangle" title="Треугольник">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 22 21 2 21"/></svg>
+    </button>
+    <button class="shape-btn" data-shape="diamond" title="Ромб">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 12 12 22 2 12"/></svg>
+    </button>
+    <button class="shape-btn" data-shape="star" title="Звезда">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/></svg>
+    </button>
+    <button class="shape-btn" data-shape="hexagon" title="Шестиугольник">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 20 7 20 17 12 22 4 17 4 7"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- =============================================
+     СТАТУС-БАР
+     ============================================= -->
+<div id="statusbar" class="acrylic">
+  <div class="status-item">
+    <div id="status-color-dot"></div>
+    <span id="status-color-text">#FFFFFF</span>
+  </div>
+  <div class="status-item">
+    <span>●</span>
+    <span id="status-thickness">4px</span>
+  </div>
+  <div class="status-item">
+    <span id="status-tool">Карандаш</span>
+  </div>
+  <div class="status-item">
+    <span>История:</span>
+    <span id="status-history">0</span>
+  </div>
+</div>
+
+<!-- =============================================
+     ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ
+     ============================================= -->
+<div id="hotkeys-panel" class="acrylic">
+  <div class="hk-title">Горячие клавиши</div>
+  <div class="hk-row"><span>Карандаш</span><kbd>P</kbd></div>
+  <div class="hk-row"><span>Маркер</span><kbd>M</kbd></div>
+  <div class="hk-row"><span>Выделитель</span><kbd>G</kbd></div>
+  <div class="hk-row"><span>Ластик</span><kbd>E</kbd></div>
+  <div class="hk-row"><span>Фигуры</span><kbd>S</kbd></div>
+  <div class="hk-row"><span>Линия</span><kbd>L</kbd></div>
+  <div class="hk-row"><span>Стрелка</span><kbd>A</kbd></div>
+  <div class="hk-row"><span>Текст</span><kbd>T</kbd></div>
+  <div class="hk-row"><span>Пипетка</span><kbd>I</kbd></div>
+  <div class="hk-row"><span>Толщина</span><kbd>B</kbd></div>
+  <div class="hk-row"><span>Цвет</span><kbd>C</kbd></div>
+  <div class="hk-row"><span>Курсор</span><kbd>V</kbd></div>
+  <div class="hk-row"><span>Скрыть</span><kbd>H</kbd></div>
+  <div class="hk-row"><span>Отменить</span><kbd>Ctrl+Z</kbd></div>
+  <div class="hk-row"><span>Повторить</span><kbd>Ctrl+Y</kbd></div>
+  <div class="hk-row"><span>Очистить</span><kbd>Del</kbd></div>
+  <div class="hk-row"><span>Скриншот</span><kbd>Ctrl+S</kbd></div>
+  <div class="hk-row"><span>− Толщина</span><kbd>[</kbd></div>
+  <div class="hk-row"><span>+ Толщина</span><kbd>]</kbd></div>
+  <div class="hk-row"><span>Режим</span><kbd>Ctrl+⇧+D</kbd></div>
+  <div class="hk-row"><span>Выход</span><kbd>Ctrl+⇧+Q</kbd></div>
+</div>
+
+<!-- =============================================
+     ИНДИКАТОР РЕЖИМА
+     ============================================= -->
+<div id="mode-indicator" class="acrylic">🖱 Режим курсора — Ctrl+Shift+D для рисования</div>
+
+<script>
+// =============================================
+// ИНИЦИАЛИЗАЦИЯ CANVAS
+// =============================================
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Временный canvas для предпросмотра фигур
+const tempCanvas = document.createElement('canvas');
+const tempCtx = tempCanvas.getContext('2d');
+document.body.appendChild(tempCanvas);
+Object.assign(tempCanvas.style, {
+  position: 'fixed', top: '0', left: '0',
+  pointerEvents: 'none', zIndex: '1'
+});
+
+function resizeCanvases() {
+  const w = window.innerWidth, h = window.innerHeight;
+  // Сохраняем содержимое перед resize
+  const imgData = canvas.width > 0 ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+  canvas.width = w; canvas.height = h;
+  tempCanvas.width = w; tempCanvas.height = h;
+  if (imgData) ctx.putImageData(imgData, 0, 0);
+}
+
+resizeCanvases();
+window.addEventListener('resize', resizeCanvases);
+
+// =============================================
+// СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+// =============================================
+
+const state = {
+  tool: 'pencil',       // текущий инструмент
+  color: '#FFFFFF',     // текущий цвет
+  thickness: 4,         // толщина кисти (px)
+  shape: 'rect',        // текущая фигура
+  drawMode: true,       // true = рисование, false = режим курсора
+  canvasVisible: true,  // видимость canvas
+  isDrawing: false,     // идёт ли рисование
+  startX: 0, startY: 0 // начальная точка для фигур/линий
+};
+
+// =============================================
+// ИСТОРИЯ (Undo/Redo)
+// =============================================
+
+const history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 50;
+
+function saveHistory() {
+  // Удаляем redo-историю при новом действии
+  if (historyIndex < history.length - 1) {
+    history.splice(historyIndex + 1);
+  }
+  if (history.length >= MAX_HISTORY) history.shift();
+  history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  historyIndex = history.length - 1;
+  updateStatus();
+}
+
+function undo() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    ctx.putImageData(history[historyIndex], 0, 0);
+    updateStatus();
+  } else if (historyIndex === 0) {
+    historyIndex = -1;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    updateStatus();
+  }
+}
+
+function redo() {
+  if (historyIndex < history.length - 1) {
+    historyIndex++;
+    ctx.putImageData(history[historyIndex], 0, 0);
+    updateStatus();
+  }
+}
+
+// =============================================
+// УТИЛИТЫ РИСОВАНИЯ
+// =============================================
+
+// Настройка контекста для рисования
+function setupCtx(c = ctx) {
+  c.strokeStyle = state.color;
+  c.fillStyle = state.color;
+  c.lineWidth = state.thickness;
+  c.lineCap = state.tool === 'highlighter' ? 'square' : 'round';
+  c.lineJoin = 'round';
+  c.globalAlpha = state.tool === 'highlighter' ? 0.3
+                : state.tool === 'marker'       ? 0.7
+                : 1.0;
+  c.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+}
+
+// Получить координаты из события
+function getXY(e) {
+  const r = canvas.getBoundingClientRect();
+  if (e.touches) {
+    return {
+      x: e.touches[0].clientX - r.left,
+      y: e.touches[0].clientY - r.top
+    };
+  }
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+// =============================================
+// РИСОВАНИЕ ФИГУР
+// =============================================
+
+function drawShape(c, x1, y1, x2, y2, shape, filled) {
+  c.beginPath();
+  switch (shape) {
+    case 'rect': {
+      c.rect(x1, y1, x2 - x1, y2 - y1);
+      break;
+    }
+    case 'circle': {
+      const rx = (x2 - x1) / 2, ry = (y2 - y1) / 2;
+      c.ellipse(x1 + rx, y1 + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+      break;
+    }
+    case 'triangle': {
+      c.moveTo((x1 + x2) / 2, y1);
+      c.lineTo(x2, y2);
+      c.lineTo(x1, y2);
+      c.closePath();
+      break;
+    }
+    case 'diamond': {
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+      c.moveTo(cx, y1);
+      c.lineTo(x2, cy);
+      c.lineTo(cx, y2);
+      c.lineTo(x1, cy);
+      c.closePath();
+      break;
+    }
+    case 'star': {
+      const cx2 = (x1 + x2) / 2, cy2 = (y1 + y2) / 2;
+      const outerR = Math.min(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 2;
+      const innerR = outerR * 0.4;
+      for (let i = 0; i < 10; i++) {
+        const angle = (i * Math.PI) / 5 - Math.PI / 2;
+        const r = i % 2 === 0 ? outerR : innerR;
+        const px = cx2 + r * Math.cos(angle);
+        const py = cy2 + r * Math.sin(angle);
+        i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
+      }
+      c.closePath();
+      break;
+    }
+    case 'hexagon': {
+      const cx3 = (x1 + x2) / 2, cy3 = (y1 + y2) / 2;
+      const r3 = Math.min(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 2;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI) / 3 - Math.PI / 6;
+        const px = cx3 + r3 * Math.cos(angle);
+        const py = cy3 + r3 * Math.sin(angle);
+        i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
+      }
+      c.closePath();
+      break;
+    }
+  }
+  if (filled) { c.fill(); } else { c.stroke(); }
+}
+
+// Нарисовать стрелку
+function drawArrow(c, x1, y1, x2, y2) {
+  const headLen = Math.max(state.thickness * 3, 15);
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  c.beginPath();
+  c.moveTo(x1, y1);
+  c.lineTo(x2, y2);
+  c.stroke();
+  c.beginPath();
+  c.moveTo(x2, y2);
+  c.lineTo(
+    x2 - headLen * Math.cos(angle - Math.PI / 6),
+    y2 - headLen * Math.sin(angle - Math.PI / 6)
+  );
+  c.lineTo(
+    x2 - headLen * Math.cos(angle + Math.PI / 6),
+    y2 - headLen * Math.sin(angle + Math.PI / 6)
+  );
+  c.closePath();
+  c.fill();
+}
+
+// =============================================
+// ОБРАБОТЧИКИ МЫШИ / TOUCH
+// =============================================
+
+canvas.addEventListener('pointerdown', onPointerDown);
+canvas.addEventListener('pointermove', onPointerMove);
+canvas.addEventListener('pointerup', onPointerUp);
+canvas.addEventListener('pointerleave', onPointerUp);
+
+function onPointerDown(e) {
+  if (!state.drawMode) return;
+  if (state.tool === 'cursor') return;
+
+  // Инструмент пипетка
+  if (state.tool === 'eyedropper') {
+    const { x, y } = getXY(e);
+    const pixel = ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data;
+    if (pixel[3] > 0) {
+      const hex = '#' + [pixel[0], pixel[1], pixel[2]]
+        .map(v => v.toString(16).padStart(2, '0')).join('');
+      setColor(hex);
+    }
+    return;
+  }
+
+  // Инструмент текст
+  if (state.tool === 'text') {
+    const { x, y } = getXY(e);
+    showTextInput(x, y);
+    return;
+  }
+
+  state.isDrawing = true;
+  canvas.setPointerCapture(e.pointerId);
+  const { x, y } = getXY(e);
+  state.startX = x;
+  state.startY = y;
+
+  // Свободное рисование — начало пути
+  if (['pencil', 'marker', 'highlighter', 'eraser'].includes(state.tool)) {
+    setupCtx();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+}
+
+function onPointerMove(e) {
+  if (!state.isDrawing) return;
+  const { x, y } = getXY(e);
+
+  if (['pencil', 'marker', 'highlighter', 'eraser'].includes(state.tool)) {
+    // Свободное рисование
+    setupCtx();
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  } else if (['shapes', 'line', 'arrow'].includes(state.tool)) {
+    // Предпросмотр фигуры/линии на временном canvas
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    setupCtx(tempCtx);
+    if (state.tool === 'shapes') {
+      drawShape(tempCtx, state.startX, state.startY, x, y, state.shape, false);
+    } else if (state.tool === 'line') {
+      tempCtx.beginPath();
+      tempCtx.moveTo(state.startX, state.startY);
+      tempCtx.lineTo(x, y);
+      tempCtx.stroke();
+    } else if (state.tool === 'arrow') {
+      drawArrow(tempCtx, state.startX, state.startY, x, y);
+    }
+  }
+}
+
+function onPointerUp(e) {
+  if (!state.isDrawing) return;
+  state.isDrawing = false;
+
+  const { x, y } = getXY(e);
+
+  if (['pencil', 'marker', 'highlighter', 'eraser'].includes(state.tool)) {
+    setupCtx();
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.closePath();
+  } else if (['shapes', 'line', 'arrow'].includes(state.tool)) {
+    // Перенос с временного canvas на основной
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    setupCtx();
+    if (state.tool === 'shapes') {
+      drawShape(ctx, state.startX, state.startY, x, y, state.shape, false);
+    } else if (state.tool === 'line') {
+      ctx.beginPath();
+      ctx.moveTo(state.startX, state.startY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    } else if (state.tool === 'arrow') {
+      drawArrow(ctx, state.startX, state.startY, x, y);
+    }
+  }
+
+  // Сохраняем в историю после завершения штриха
+  if (state.tool !== 'cursor' && state.tool !== 'eyedropper') {
+    saveHistory();
+  }
+}
+
+// =============================================
+// ИНСТРУМЕНТ ТЕКСТ
+// =============================================
+
+const textInput = document.getElementById('text-input-overlay');
+
+function showTextInput(x, y) {
+  textInput.style.left = x + 'px';
+  textInput.style.top = y + 'px';
+  textInput.style.display = 'block';
+  textInput.style.color = state.color;
+  textInput.style.fontSize = Math.max(state.thickness * 3, 14) + 'px';
+  textInput.value = '';
+  textInput.focus();
+}
+
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const text = textInput.value.trim();
+    if (text) {
+      const x = parseFloat(textInput.style.left);
+      const y = parseFloat(textInput.style.top);
+      ctx.font = `${Math.max(state.thickness * 3, 14)}px 'Segoe UI', sans-serif`;
+      ctx.fillStyle = state.color;
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillText(text, x, y);
+      saveHistory();
+    }
+    textInput.style.display = 'none';
+    textInput.value = '';
+  }
+  if (e.key === 'Escape') {
+    textInput.style.display = 'none';
+    textInput.value = '';
+  }
+});
+
+// Клик вне инпута — отменить
+document.addEventListener('pointerdown', (e) => {
+  if (e.target !== textInput && textInput.style.display !== 'none') {
+    textInput.style.display = 'none';
+  }
+}, true);
+
+// =============================================
+// ВЫБОР ИНСТРУМЕНТА
+// =============================================
+
+const toolNames = {
+  cursor: 'Курсор',
+  eye: 'Глаз',
+  pencil: 'Карандаш',
+  marker: 'Маркер',
+  highlighter: 'Выделитель',
+  eraser: 'Ластик',
+  shapes: 'Фигуры',
+  line: 'Линия',
+  arrow: 'Стрелка',
+  text: 'Текст',
+  eyedropper: 'Пипетка'
+};
+
+function selectTool(name) {
+  // Снять активность со всех кнопок инструментов
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+  const btn = document.getElementById('btn-' + name);
+  if (btn) btn.classList.add('active');
+
+  state.tool = name;
+
+  // Управление курсором
+  if (name === 'eraser') {
+    canvas.style.cursor = 'cell';
+  } else if (name === 'eyedropper') {
+    canvas.style.cursor = 'crosshair';
+  } else if (name === 'text') {
+    canvas.style.cursor = 'text';
+  } else if (name === 'cursor') {
+    canvas.style.cursor = 'default';
+  } else {
+    canvas.style.cursor = 'crosshair';
+  }
+
+  // Electron: переключение режима кликов сквозь окно
+  if (name === 'cursor') {
+    state.drawMode = false;
+    window.aerodraw?.setDrawMode(false);
+    document.getElementById('mode-indicator').classList.add('visible');
+  } else {
+    state.drawMode = true;
+    window.aerodraw?.setDrawMode(true);
+    document.getElementById('mode-indicator').classList.remove('visible');
+  }
+
+  closeAllSubmenus();
+  updateStatus();
+}
+
+// =============================================
+// ПОДМЕНЮ
+// =============================================
+
+let activeSubmenu = null;
+
+function closeAllSubmenus() {
+  document.querySelectorAll('.submenu').forEach(m => m.classList.remove('visible'));
+  activeSubmenu = null;
+}
+
+function toggleSubmenu(id, btnEl) {
+  const menu = document.getElementById(id);
+  if (activeSubmenu === id) {
+    closeAllSubmenus();
+    return;
+  }
+  closeAllSubmenus();
+  activeSubmenu = id;
+  menu.classList.add('visible');
+  // Позиционирование по кнопке
+  const rect = btnEl.getBoundingClientRect();
+  menu.style.top = (rect.top + rect.height / 2 - menu.offsetHeight / 2) + 'px';
+  // Корректировка если выходит за край экрана
+  const mh = menu.offsetHeight || 150;
+  let top = rect.top + rect.height / 2 - mh / 2;
+  top = Math.max(8, Math.min(window.innerHeight - mh - 8, top));
+  menu.style.top = top + 'px';
+}
+
+// Закрыть подменю при клике вне
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('.submenu') && !e.target.closest('.tool-btn')) {
+    closeAllSubmenus();
+  }
+}, true);
+
+// =============================================
+// КНОПКИ ТУЛБАРА
+// =============================================
+
+// Инструменты рисования
+document.getElementById('btn-cursor').addEventListener('click', () => selectTool('cursor'));
+document.getElementById('btn-pencil').addEventListener('click', () => selectTool('pencil'));
+document.getElementById('btn-marker').addEventListener('click', () => selectTool('marker'));
+document.getElementById('btn-highlighter').addEventListener('click', () => selectTool('highlighter'));
+document.getElementById('btn-eraser').addEventListener('click', () => selectTool('eraser'));
+document.getElementById('btn-line').addEventListener('click', () => selectTool('line'));
+document.getElementById('btn-arrow').addEventListener('click', () => selectTool('arrow'));
+document.getElementById('btn-text').addEventListener('click', () => selectTool('text'));
+document.getElementById('btn-eyedropper').addEventListener('click', () => selectTool('eyedropper'));
+
+// Кнопка "Глаз" — скрыть/показать canvas
+document.getElementById('btn-eye').addEventListener('click', () => {
+  state.canvasVisible = !state.canvasVisible;
+  canvas.style.display = state.canvasVisible ? 'block' : 'none';
+  tempCanvas.style.display = state.canvasVisible ? 'block' : 'none';
+  document.getElementById('btn-eye').classList.toggle('active', !state.canvasVisible);
+});
+
+// Кнопка "Фигуры" — открыть подменю фигур
+document.getElementById('btn-shapes').addEventListener('click', (e) => {
+  selectTool('shapes');
+  toggleSubmenu('shape-menu', e.currentTarget);
+});
+
+// Кнопка "Толщина"
+document.getElementById('btn-thickness').addEventListener('click', (e) => {
+  toggleSubmenu('thickness-menu', e.currentTarget);
+});
+
+// Кнопка "Цвет"
+document.getElementById('btn-color').addEventListener('click', (e) => {
+  toggleSubmenu('color-menu', e.currentTarget);
+});
+
+// Отмена / Повтор
+document.getElementById('btn-undo').addEventListener('click', () => {
+  undo();
+  flashBtn('btn-undo');
+});
+
+document.getElementById('btn-redo').addEventListener('click', () => {
+  redo();
+  flashBtn('btn-redo');
+});
+
+// Очистить
+document.getElementById('btn-clear').addEventListener('click', () => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  saveHistory();
+  flashBtn('btn-clear');
+});
+
+// Скриншот
+document.getElementById('btn-screenshot').addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'aerodraw-' + Date.now() + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  flashBtn('btn-screenshot');
+});
+
+// Flash-анимация для action-кнопок
+function flashBtn(id) {
+  const btn = document.getElementById(id);
+  btn.classList.remove('flash');
+  void btn.offsetWidth; // reflow
+  btn.classList.add('flash');
+  setTimeout(() => btn.classList.remove('flash'), 300);
+}
+
+// =============================================
+// ПОДМЕНЮ ТОЛЩИНЫ
+// =============================================
+
+const thicknessSlider = document.getElementById('thickness-slider');
+const thicknessDot = document.getElementById('thickness-dot');
+const thicknessValue = document.getElementById('thickness-value');
+
+thicknessSlider.addEventListener('input', () => {
+  const v = parseInt(thicknessSlider.value);
+  setThickness(v);
+});
+
+function setThickness(v) {
+  state.thickness = v;
+  thicknessSlider.value = v;
+  const size = Math.min(v * 2, 40);
+  thicknessDot.style.width = size + 'px';
+  thicknessDot.style.height = size + 'px';
+  thicknessValue.textContent = v + ' px';
+  updateStatus();
+}
+
+// =============================================
+// ПОДМЕНЮ ЦВЕТОВ
+// =============================================
+
+const PALETTE = [
+  '#FFFFFF', '#C0C0C0', '#808080', '#000000', '#FF0000', '#CC0000',
+  '#FF6600', '#FF9900', '#FFCC00', '#FFD66B', '#FFFF00', '#99FF00',
+  '#6BFF8E', '#00CC66', '#00CFFE', '#0099FF', '#0066FF', '#3333FF',
+  '#6633CC', '#9933FF', '#FF6EC7', '#FF3399', '#CC0066', '#990033'
+];
+
+const colorGrid = document.getElementById('color-grid');
+PALETTE.forEach(color => {
+  const swatch = document.createElement('div');
+  swatch.className = 'color-swatch';
+  swatch.style.background = color;
+  swatch.title = color;
+  if (color === state.color) swatch.classList.add('selected');
+  swatch.addEventListener('click', () => {
+    setColor(color);
+    closeAllSubmenus();
+  });
+  colorGrid.appendChild(swatch);
+});
+
+const customColorInput = document.getElementById('custom-color-input');
+customColorInput.addEventListener('input', () => {
+  setColor(customColorInput.value);
+});
+
+function setColor(color) {
+  state.color = color;
+  // Обновить выбранный swatch
+  document.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('selected', s.style.background === hexToRgb(color) || s.title === color);
+  });
+  customColorInput.value = color;
+  updateStatus();
+}
+
+// Конвертация hex -> rgb строку для сравнения
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// =============================================
+// ПОДМЕНЮ ФИГУР
+// =============================================
+
+document.querySelectorAll('.shape-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.shape = btn.dataset.shape;
+    closeAllSubmenus();
+  });
+});
+
+// =============================================
+// ОБНОВЛЕНИЕ СТАТУС-БАРА
+// =============================================
+
+function updateStatus() {
+  document.getElementById('status-color-dot').style.background = state.color;
+  document.getElementById('status-color-text').textContent = state.color.toUpperCase();
+  document.getElementById('status-thickness').textContent = state.thickness + 'px';
+  document.getElementById('status-tool').textContent = toolNames[state.tool] || state.tool;
+  document.getElementById('status-history').textContent = historyIndex + 1;
+}
+
+updateStatus();
+
+// =============================================
+// ГОРЯЧИЕ КЛАВИШИ
+// =============================================
+
+document.addEventListener('keydown', (e) => {
+  // Не перехватываем если фокус в инпуте
+  if (e.target === textInput) return;
+
+  const key = e.key.toLowerCase();
+
+  if (e.ctrlKey || e.metaKey) {
+    if (key === 'z') { e.preventDefault(); undo(); return; }
+    if (key === 'y') { e.preventDefault(); redo(); return; }
+    if (key === 's') { e.preventDefault(); document.getElementById('btn-screenshot').click(); return; }
+    return; // не обрабатываем другие Ctrl+key
+  }
+
+  switch (key) {
+    case 'v': selectTool('cursor'); break;
+    case 'h':
+      document.getElementById('btn-eye').click(); break;
+    case 'p': selectTool('pencil'); break;
+    case 'm': selectTool('marker'); break;
+    case 'g': selectTool('highlighter'); break;
+    case 'e': selectTool('eraser'); break;
+    case 's': selectTool('shapes'); break;
+    case 'l': selectTool('line'); break;
+    case 'a': selectTool('arrow'); break;
+    case 't': selectTool('text'); break;
+    case 'i': selectTool('eyedropper'); break;
+    case 'b': document.getElementById('btn-thickness').click(); break;
+    case 'c': document.getElementById('btn-color').click(); break;
+    case 'delete':
+    case 'backspace':
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      saveHistory();
+      flashBtn('btn-clear');
+      break;
+    case '[':
+      setThickness(Math.max(1, state.thickness - 1));
+      break;
+    case ']':
+      setThickness(Math.min(40, state.thickness + 1));
+      break;
+  }
+});
+
+// =============================================
+// ИНТЕГРАЦИЯ С ELECTRON
+// =============================================
+
+// Слушаем изменение режима рисования через глобальный хоткей (Ctrl+Shift+D)
+if (window.aerodraw) {
+  window.aerodraw.onDrawModeChanged((enabled) => {
+    state.drawMode = enabled;
+    if (!enabled) {
+      // Переключились в режим курсора
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('btn-cursor').classList.add('active');
+      state.tool = 'cursor';
+      document.getElementById('mode-indicator').classList.add('visible');
+    } else {
+      // Вернулись в режим рисования — выбираем карандаш
+      selectTool('pencil');
+    }
+    updateStatus();
+  });
+}
+
+// Инициализация при загрузке
+selectTool('pencil');
+setColor('#FFFFFF');
+setThickness(4);
+</script>
+</body>
+</html>
