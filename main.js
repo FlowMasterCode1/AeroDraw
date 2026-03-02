@@ -7,9 +7,6 @@ const path = require('path');
 let win = null;
 let drawMode = true;
 
-// Отключаем аппаратное ускорение для стабильности прозрачности на некоторых GPU
-app.disableHardwareAcceleration();
-
 app.whenReady().then(() => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
