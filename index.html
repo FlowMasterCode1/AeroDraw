@@ -603,7 +603,7 @@
 <div id="toolbar" class="acrylic">
 
   <!-- Ручка для перетаскивания -->
-  <div id="toolbar-grip" title="">
+  <div id="toolbar-grip" title="Перетащить (двойной клик — смена ориентации)">
     <span></span><span></span><span></span>
   </div>
 
@@ -1271,14 +1271,14 @@ function onPointerUp(e) {
   // Сохраняем в историю после завершения штриха
   if (state.tool !== 'cursor' && state.tool !== 'eyedropper') {
     if (state.fadingInk && ['pencil', 'eraser'].includes(state.tool)) {
-      // Для затухающего карандаша — создаём отдельный слой и НЕ пишем на main canvas
-      // (для карандаша уже написали выше — нужно стереть и создать слой)
-      // Упрощённо: сохраняем историю, но сразу запускаем затухание
+      // Для затухающего карандаша — сохраняем историю, затем откатываем на fading-слой
       saveHistory();
       startFadeLastStroke();
-    } else if (!state.fadingInk || ['marker', 'highlighter'].includes(state.tool)) {
-      if (!state.fadingInk) saveHistory();
+    } else if (!state.fadingInk) {
+      // Для обычного режима — всегда сохраняем историю
+      saveHistory();
     }
+    // Для marker/highlighter в режиме fadingInk: история не нужна (штрих не попал на main canvas)
   }
 }
 
@@ -1434,7 +1434,7 @@ function hexToRgba(hex, alpha) {
 }
 
 // Обновляем цвет лазера при смене цвета
-const _origSetColor_ref = null; // see setColor below
+// (вызывается из setColor)
 
 // =============================================
 // РЕГИОН-СКРИНШОТ
@@ -1461,7 +1461,7 @@ regionOverlay.addEventListener('pointerdown', (e) => {
 });
 
 regionOverlay.addEventListener('pointermove', (e) => {
-  if (!regionState.active || !regionSelection.style.display || regionSelection.style.display === 'none') return;
+  if (!regionState.active || regionSelection.style.display === 'none') return;
   const x = Math.min(e.clientX, regionState.startX);
   const y = Math.min(e.clientY, regionState.startY);
   const w = Math.abs(e.clientX - regionState.startX);
@@ -1703,7 +1703,8 @@ let dragData = null;
       // По умолчанию — по центру по вертикали
       toolbar.style.top = Math.max(0, window.innerHeight / 2 - 200) + 'px';
     }
-  } catch (_) {
+  } catch (err) {
+    console.warn('AeroDraw: failed to restore toolbar state', err);
     toolbar.style.top = Math.max(0, window.innerHeight / 2 - 200) + 'px';
   }
 })();
@@ -1715,7 +1716,9 @@ function saveToolbarState() {
       top: parseInt(toolbar.style.top) || 200,
       orientation: toolbar.classList.contains('horizontal') ? 'horizontal' : 'vertical'
     }));
-  } catch (_) {}
+  } catch (err) {
+    console.warn('AeroDraw: failed to save toolbar state', err);
+  }
 }
 
 grip.addEventListener('pointerdown', (e) => {
