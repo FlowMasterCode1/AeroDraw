@@ -246,7 +246,7 @@
        ============================================= */
     .submenu {
       position: fixed;
-      left: 72px;
+      left: auto;
       display: none;
       z-index: 2000;
       padding: 12px;
@@ -427,27 +427,6 @@
     /* =============================================
        ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ
        ============================================= */
-    #hotkeys-panel {
-      position: fixed;
-      top: 12px;
-      right: 12px;
-      padding: 10px 14px;
-      z-index: 1000;
-      font-size: 10px;
-      color: rgba(255,255,255,0.55);
-      line-height: 1.7;
-      min-width: 160px;
-      animation: fadeIn 0.5s ease both;
-    }
-
-    #hotkeys-panel .hk-title {
-      color: rgba(255,255,255,0.8);
-      font-size: 11px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      padding-bottom: 5px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
 
     #hotkeys-panel .hk-row {
       display: flex;
@@ -578,12 +557,129 @@
 
     #region-overlay.active { display: block; }
 
-    #region-selection {
-      position: absolute;
-      border: 2px dashed var(--accent);
-      background: rgba(0, 207, 254, 0.06);
-      pointer-events: none;
+    /* --- Подменю линий --- */
+    #line-menu {
+      width: 168px;
     }
+
+    .line-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .line-type-btn {
+      width: 44px;
+      height: 44px;
+      border: 1.5px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, border-color 0.12s, transform 0.1s;
+    }
+
+    .line-type-btn svg { stroke: rgba(255,255,255,0.7); }
+
+    .line-type-btn:hover {
+      background: var(--btn-hover-bg);
+      transform: scale(1.08);
+    }
+
+    .line-type-btn.active {
+      background: var(--btn-active-bg);
+      border-color: var(--accent);
+    }
+
+    .line-type-btn.active svg { stroke: white; }
+
+    /* =============================================
+       ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ — расширения
+       ============================================= */
+    #hotkeys-panel {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      padding: 8px 14px 14px;
+      z-index: 1000;
+      font-size: 10px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.7;
+      min-width: 160px;
+      overflow: auto;
+      animation: fadeIn 0.5s ease both;
+    }
+
+    #hotkeys-panel.hidden { display: none; }
+
+    #hotkeys-grip {
+      width: 100%;
+      height: 12px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: grab;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      transition: background 0.15s;
+    }
+
+    #hotkeys-grip:hover { background: rgba(255,255,255,0.08); }
+    #hotkeys-grip.dragging { cursor: grabbing; }
+
+    #hotkeys-grip span {
+      display: block;
+      width: 14px;
+      height: 2px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.25);
+    }
+
+    #hotkeys-panel .hk-title {
+      color: rgba(255,255,255,0.8);
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .hk-close {
+      cursor: pointer;
+      color: rgba(255,255,255,0.45);
+      font-size: 15px;
+      line-height: 1;
+      padding: 1px 3px;
+      border-radius: 3px;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .hk-close:hover {
+      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.10);
+    }
+
+    #hotkeys-resize-handle {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 12px;
+      height: 12px;
+      cursor: se-resize;
+      opacity: 0.4;
+      background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.6) 50%);
+      border-radius: 0 0 var(--acrylic-radius) 0;
+    }
+
+    #hotkeys-resize-handle:hover { opacity: 0.8; }
   </style>
 </head>
 <body>
@@ -823,6 +919,32 @@
 </div>
 
 <!-- =============================================
+     ПОДМЕНЮ ЛИНИЙ
+     ============================================= -->
+<div id="line-menu" class="submenu acrylic">
+  <div class="line-grid">
+    <button class="line-type-btn active" data-line="straight" title="Прямая">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg>
+    </button>
+    <button class="line-type-btn" data-line="curve" title="Кривая">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M4 20 Q12 4 20 20" fill="none"/></svg>
+    </button>
+    <button class="line-type-btn" data-line="polyline" title="Ломаная">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 20 9 6 14 14 20 4"/></svg>
+    </button>
+    <button class="line-type-btn" data-line="dashed" title="Пунктир">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4" stroke-dasharray="4 3"/></svg>
+    </button>
+    <button class="line-type-btn" data-line="dotted" title="Точки">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4" stroke-dasharray="1 4"/></svg>
+    </button>
+    <button class="line-type-btn" data-line="arrow" title="Стрелка">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- =============================================
      СТАТУС-БАР
      ============================================= -->
 <div id="statusbar" class="acrylic">
@@ -847,7 +969,8 @@
      ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ
      ============================================= -->
 <div id="hotkeys-panel" class="acrylic">
-  <div class="hk-title">Горячие клавиши</div>
+  <div id="hotkeys-grip"><span></span><span></span><span></span></div>
+  <div class="hk-title">Горячие клавиши<span class="hk-close" title="Скрыть (? или F1)">×</span></div>
   <div class="hk-row"><span>Карандаш</span><kbd>P</kbd></div>
   <div class="hk-row"><span>Маркер</span><kbd>M</kbd></div>
   <div class="hk-row"><span>Выделитель</span><kbd>G</kbd></div>
@@ -873,6 +996,8 @@
   <div class="hk-row"><span>Затухание</span><kbd>F</kbd></div>
   <div class="hk-row"><span>Лазер</span><kbd>R</kbd></div>
   <div class="hk-row"><span>Скриншот рег.</span><kbd>Ctrl+⇧+S</kbd></div>
+  <div class="hk-row"><span>Справка</span><kbd>?/F1</kbd></div>
+  <div id="hotkeys-resize-handle"></div>
 </div>
 
 <!-- =============================================
@@ -932,6 +1057,7 @@ const state = {
   color: '#FFFFFF',     // текущий цвет
   thickness: 4,         // толщина кисти (px)
   shape: 'rect',        // текущая фигура
+  lineType: 'straight', // тип линии: straight, curve, polyline, dashed, dotted, arrow
   drawMode: true,       // true = рисование, false = режим курсора
   canvasVisible: true,  // видимость canvas
   isDrawing: false,     // идёт ли рисование
@@ -940,7 +1066,9 @@ const state = {
   fadingInk: false,     // режим затухающих чернил
   laserMode: false,     // режим лазерного указателя
   prevX: 0, prevY: 0,   // предыдущая точка для сглаживания
-  strokePoints: []      // точки текущего штриха
+  strokePoints: [],     // точки текущего штриха
+  polylinePoints: [],   // точки ломаной линии
+  polylineActive: false // идёт ли построение ломаной
 };
 
 // =============================================
@@ -1104,6 +1232,68 @@ function drawArrow(c, x1, y1, x2, y2) {
   c.fill();
 }
 
+// Предпросмотр/рисование линии на canvas c с учётом state.lineType
+function drawLineFinal(c, sx, sy, ex, ey) {
+  const lt = state.lineType;
+  if (lt === 'straight') {
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(ex, ey);
+    c.stroke();
+  } else if (lt === 'curve') {
+    const { cpX, cpY } = getCurveCP(sx, sy, ex, ey);
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.quadraticCurveTo(cpX, cpY, ex, ey);
+    c.stroke();
+  } else if (lt === 'dashed') {
+    c.setLineDash([12, 6]);
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(ex, ey);
+    c.stroke();
+    c.setLineDash([]);
+  } else if (lt === 'dotted') {
+    const origLineCap = c.lineCap;
+    c.setLineDash([2, 8]);
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(ex, ey);
+    c.stroke();
+    c.setLineDash([]);
+    c.lineCap = origLineCap;
+  } else if (lt === 'arrow') {
+    drawArrow(c, sx, sy, ex, ey);
+  }
+}
+
+// Вычислить контрольную точку квадратичной кривой Безье
+function getCurveCP(sx, sy, ex, ey) {
+  const midX = (sx + ex) / 2;
+  const midY = (sy + ey) / 2;
+  const dx = ex - sx;
+  const dy = ey - sy;
+  return { cpX: midX - dy * 0.4, cpY: midY + dx * 0.4 };
+}
+
+// Завершить ломаную линию
+function finalizePolyline() {
+  state.polylineActive = false;
+  tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+  if (state.polylinePoints.length >= 2) {
+    setupCtx();
+    ctx.beginPath();
+    ctx.moveTo(state.polylinePoints[0].x, state.polylinePoints[0].y);
+    for (let i = 1; i < state.polylinePoints.length; i++) {
+      ctx.lineTo(state.polylinePoints[i].x, state.polylinePoints[i].y);
+    }
+    ctx.stroke();
+    saveHistory();
+  }
+  state.polylinePoints = [];
+}
+
 // =============================================
 // ОБРАБОТЧИКИ МЫШИ / TOUCH
 // =============================================
@@ -1137,6 +1327,18 @@ function onPointerDown(e) {
     return;
   }
 
+  // Ломаная линия — добавляем точки по кликам
+  if (state.tool === 'line' && state.lineType === 'polyline') {
+    const { x, y } = getXY(e);
+    if (!state.polylineActive) {
+      state.polylinePoints = [{ x, y }];
+      state.polylineActive = true;
+    } else {
+      state.polylinePoints.push({ x, y });
+    }
+    return;
+  }
+
   state.isDrawing = true;
   canvas.setPointerCapture(e.pointerId);
   const { x, y } = getXY(e);
@@ -1163,6 +1365,22 @@ function onPointerMove(e) {
   // Лазерный указатель
   if (state.laserMode) {
     return; // не рисуем в режиме лазера
+  }
+
+  // Предпросмотр ломаной линии (не требует isDrawing)
+  if (state.tool === 'line' && state.lineType === 'polyline' && state.polylineActive) {
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    setupCtx(tempCtx);
+    if (state.polylinePoints.length >= 1) {
+      tempCtx.beginPath();
+      tempCtx.moveTo(state.polylinePoints[0].x, state.polylinePoints[0].y);
+      for (let i = 1; i < state.polylinePoints.length; i++) {
+        tempCtx.lineTo(state.polylinePoints[i].x, state.polylinePoints[i].y);
+      }
+      tempCtx.lineTo(x, y);
+      tempCtx.stroke();
+    }
+    return;
   }
 
   if (!state.isDrawing) return;
@@ -1210,10 +1428,7 @@ function onPointerMove(e) {
     if (state.tool === 'shapes') {
       drawShape(tempCtx, state.startX, state.startY, x, y, state.shape, false);
     } else if (state.tool === 'line') {
-      tempCtx.beginPath();
-      tempCtx.moveTo(state.startX, state.startY);
-      tempCtx.lineTo(x, y);
-      tempCtx.stroke();
+      drawLineFinal(tempCtx, state.startX, state.startY, x, y);
     } else if (state.tool === 'arrow') {
       drawArrow(tempCtx, state.startX, state.startY, x, y);
     }
@@ -1259,10 +1474,7 @@ function onPointerUp(e) {
     if (state.tool === 'shapes') {
       drawShape(ctx, state.startX, state.startY, x, y, state.shape, false);
     } else if (state.tool === 'line') {
-      ctx.beginPath();
-      ctx.moveTo(state.startX, state.startY);
-      ctx.lineTo(x, y);
-      ctx.stroke();
+      drawLineFinal(ctx, state.startX, state.startY, x, y);
     } else if (state.tool === 'arrow') {
       drawArrow(ctx, state.startX, state.startY, x, y);
     }
@@ -1281,6 +1493,13 @@ function onPointerUp(e) {
     // Для marker/highlighter в режиме fadingInk: история не нужна (штрих не попал на main canvas)
   }
 }
+
+// Двойной клик — завершить ломаную линию
+canvas.addEventListener('dblclick', () => {
+  if (state.tool === 'line' && state.lineType === 'polyline' && state.polylineActive) {
+    finalizePolyline();
+  }
+});
 
 // =============================================
 // ИНСТРУМЕНТ ТЕКСТ
@@ -1577,13 +1796,26 @@ function toggleSubmenu(id, btnEl) {
   closeAllSubmenus();
   activeSubmenu = id;
   menu.classList.add('visible');
-  // Позиционирование по кнопке
+
   const rect = btnEl.getBoundingClientRect();
-  menu.style.top = (rect.top + rect.height / 2 - menu.offsetHeight / 2) + 'px';
-  // Корректировка если выходит за край экрана
+  const isHorizontal = toolbar.classList.contains('horizontal');
   const mh = menu.offsetHeight || 150;
-  let top = rect.top + rect.height / 2 - mh / 2;
-  top = Math.max(8, Math.min(window.innerHeight - mh - 8, top));
+  const mw = menu.offsetWidth || 180;
+  let left, top;
+
+  if (isHorizontal) {
+    left = rect.left;
+    top = rect.bottom + 8;
+    if (top + mh > window.innerHeight - 8) top = rect.top - mh - 8;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  } else {
+    left = rect.right + 8;
+    top = rect.top + rect.height / 2 - mh / 2;
+    if (left + mw > window.innerWidth - 8) left = rect.left - mw - 8;
+    top = Math.max(8, Math.min(window.innerHeight - mh - 8, top));
+  }
+
+  menu.style.left = left + 'px';
   menu.style.top = top + 'px';
 }
 
@@ -1604,7 +1836,10 @@ document.getElementById('btn-pencil').addEventListener('click', () => selectTool
 document.getElementById('btn-marker').addEventListener('click', () => selectTool('marker'));
 document.getElementById('btn-highlighter').addEventListener('click', () => selectTool('highlighter'));
 document.getElementById('btn-eraser').addEventListener('click', () => selectTool('eraser'));
-document.getElementById('btn-line').addEventListener('click', () => selectTool('line'));
+document.getElementById('btn-line').addEventListener('click', (e) => {
+  selectTool('line');
+  toggleSubmenu('line-menu', e.currentTarget);
+});
 document.getElementById('btn-arrow').addEventListener('click', () => selectTool('arrow'));
 document.getElementById('btn-text').addEventListener('click', () => selectTool('text'));
 document.getElementById('btn-eyedropper').addEventListener('click', () => selectTool('eyedropper'));
@@ -1756,6 +1991,131 @@ grip.addEventListener('dblclick', (e) => {
 });
 
 // =============================================
+// ПАНЕЛЬ ГОРЯЧИХ КЛАВИШ — интерактивность
+// =============================================
+
+// Base panel width (matches min-width in CSS); font size scales proportionally from 10px at this width
+const HK_BASE_WIDTH = 160;
+
+function getHkFontSize(width) {
+  return Math.min(16, Math.max(8, 10 * (width / HK_BASE_WIDTH)));
+}
+
+function saveHotkeysState() {
+  const panel = document.getElementById('hotkeys-panel');
+  try {
+    localStorage.setItem('aerodraw-hotkeys-state', JSON.stringify({
+      visible: !panel.classList.contains('hidden'),
+      left: panel.style.left ? parseInt(panel.style.left) : null,
+      top: panel.style.top ? parseInt(panel.style.top) : null,
+      width: panel.style.width ? parseInt(panel.style.width) : null,
+      height: panel.style.height ? parseInt(panel.style.height) : null
+    }));
+  } catch (err) {
+    console.warn('AeroDraw: failed to save hotkeys state', err);
+  }
+}
+
+// Восстановить состояние панели горячих клавиш из localStorage
+(function restoreHotkeysState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('aerodraw-hotkeys-state') || '{}');
+    const panel = document.getElementById('hotkeys-panel');
+    if (saved.visible === false) panel.classList.add('hidden');
+    if (saved.left != null && saved.top != null) {
+      const l = Math.max(0, Math.min(window.innerWidth - 60, saved.left));
+      const t = Math.max(0, Math.min(window.innerHeight - 60, saved.top));
+      panel.style.left = l + 'px';
+      panel.style.top = t + 'px';
+      panel.style.right = 'auto';
+    }
+    if (saved.width != null && saved.height != null) {
+      const w = Math.min(400, Math.max(140, saved.width));
+      const h = Math.min(window.innerHeight * 0.8, Math.max(100, saved.height));
+      panel.style.width = w + 'px';
+      panel.style.height = h + 'px';
+      panel.style.fontSize = getHkFontSize(w) + 'px';
+    }
+  } catch (err) {
+    console.warn('AeroDraw: failed to restore hotkeys state', err);
+  }
+})();
+
+// Кнопка закрытия
+document.querySelector('.hk-close').addEventListener('click', () => {
+  document.getElementById('hotkeys-panel').classList.add('hidden');
+  saveHotkeysState();
+});
+
+// Перетаскивание панели горячих клавиш
+const hkGrip = document.getElementById('hotkeys-grip');
+let hkDragData = null;
+
+hkGrip.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('hotkeys-panel');
+  hkDragData = {
+    startX: e.clientX - panel.getBoundingClientRect().left,
+    startY: e.clientY - panel.getBoundingClientRect().top
+  };
+  hkGrip.classList.add('dragging');
+  hkGrip.setPointerCapture(e.pointerId);
+});
+
+hkGrip.addEventListener('pointermove', (e) => {
+  if (!hkDragData) return;
+  const panel = document.getElementById('hotkeys-panel');
+  let newLeft = e.clientX - hkDragData.startX;
+  let newTop = e.clientY - hkDragData.startY;
+  newLeft = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth - 2, newLeft));
+  newTop = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight - 2, newTop));
+  panel.style.left = newLeft + 'px';
+  panel.style.top = newTop + 'px';
+  panel.style.right = 'auto';
+});
+
+hkGrip.addEventListener('pointerup', () => {
+  if (!hkDragData) return;
+  hkDragData = null;
+  hkGrip.classList.remove('dragging');
+  saveHotkeysState();
+});
+
+// Изменение размера панели горячих клавиш
+const hkResizeHandle = document.getElementById('hotkeys-resize-handle');
+let hkResizeData = null;
+
+hkResizeHandle.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('hotkeys-panel');
+  hkResizeData = {
+    startX: e.clientX,
+    startY: e.clientY,
+    startWidth: panel.offsetWidth,
+    startHeight: panel.offsetHeight
+  };
+  hkResizeHandle.setPointerCapture(e.pointerId);
+});
+
+hkResizeHandle.addEventListener('pointermove', (e) => {
+  if (!hkResizeData) return;
+  const panel = document.getElementById('hotkeys-panel');
+  const dx = e.clientX - hkResizeData.startX;
+  const dy = e.clientY - hkResizeData.startY;
+  const newWidth = Math.min(400, Math.max(140, hkResizeData.startWidth + dx));
+  const newHeight = Math.min(window.innerHeight * 0.8, Math.max(100, hkResizeData.startHeight + dy));
+  panel.style.width = newWidth + 'px';
+  panel.style.height = newHeight + 'px';
+  panel.style.fontSize = getHkFontSize(newWidth) + 'px';
+});
+
+hkResizeHandle.addEventListener('pointerup', () => {
+  if (!hkResizeData) return;
+  hkResizeData = null;
+  saveHotkeysState();
+});
+
+// =============================================
 // ТУЛТИПЫ (Fluent Design)
 // =============================================
 
@@ -1898,6 +2258,25 @@ document.querySelectorAll('.shape-btn').forEach(btn => {
 });
 
 // =============================================
+// ПОДМЕНЮ ЛИНИЙ
+// =============================================
+
+document.querySelectorAll('.line-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // If switching away from polyline without finishing, cancel it
+    if (state.polylineActive) {
+      state.polylineActive = false;
+      state.polylinePoints = [];
+      tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    }
+    document.querySelectorAll('.line-type-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.lineType = btn.dataset.line;
+    closeAllSubmenus();
+  });
+});
+
+// =============================================
 // ОБНОВЛЕНИЕ СТАТУС-БАРА
 // =============================================
 
@@ -1921,6 +2300,30 @@ document.addEventListener('keydown', (e) => {
 
   const key = e.key.toLowerCase();
 
+  // Toggle hotkeys panel
+  if (e.key === '?' || e.key === 'F1') {
+    e.preventDefault();
+    const panel = document.getElementById('hotkeys-panel');
+    panel.classList.toggle('hidden');
+    saveHotkeysState();
+    return;
+  }
+
+  // Finish polyline with Enter
+  if (e.key === 'Enter' && state.tool === 'line' && state.lineType === 'polyline' && state.polylineActive) {
+    e.preventDefault();
+    finalizePolyline();
+    return;
+  }
+
+  // Cancel polyline with Escape
+  if (e.key === 'Escape' && state.polylineActive) {
+    state.polylineActive = false;
+    state.polylinePoints = [];
+    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+    return;
+  }
+
   if (e.ctrlKey || e.metaKey) {
     if (key === 'z') { e.preventDefault(); undo(); return; }
     if (key === 'y') { e.preventDefault(); redo(); return; }
@@ -1937,8 +2340,14 @@ document.addEventListener('keydown', (e) => {
     case 'm': selectTool('marker'); break;
     case 'g': selectTool('highlighter'); break;
     case 'e': selectTool('eraser'); break;
-    case 's': selectTool('shapes'); break;
-    case 'l': selectTool('line'); break;
+    case 's':
+      selectTool('shapes');
+      toggleSubmenu('shape-menu', document.getElementById('btn-shapes'));
+      break;
+    case 'l':
+      selectTool('line');
+      toggleSubmenu('line-menu', document.getElementById('btn-line'));
+      break;
     case 'a': selectTool('arrow'); break;
     case 't': selectTool('text'); break;
     case 'i': selectTool('eyedropper'); break;
