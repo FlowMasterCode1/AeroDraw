@@ -33,12 +33,21 @@ app.whenReady().then(() => {
   win.loadFile('index.html');
   win.setMenu(null);
   win.setIgnoreMouseEvents(false); // По умолчанию — режим рисования
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setVisibleOnAllWorkspaces(true);
+
+  win.on('blur', () => {
+    win.setAlwaysOnTop(true, 'screen-saver');
+  });
 
   // Ctrl+Shift+D — переключить режим рисования / клики сквозь окно
   globalShortcut.register('CommandOrControl+Shift+D', () => {
     drawMode = !drawMode;
     win.setIgnoreMouseEvents(!drawMode, { forward: true });
     win.webContents.send('draw-mode-changed', drawMode);
+    win.show();
+    win.focus();
+    win.moveTop();
   });
 
   // Ctrl+Shift+Q — выход из приложения
